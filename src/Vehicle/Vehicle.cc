@@ -65,6 +65,7 @@
 #include "DeviceInfo.h"
 #include "StatusTextHandler.h"
 #include "MAVLinkSigning.h"
+#include "MAVLinkSigningKeys.h"
 #include "GimbalController.h"
 #include "MavlinkSettings.h"
 #include "APM.h"
@@ -508,6 +509,15 @@ void Vehicle::_mavlinkMessageReceived(LinkInterface* link, mavlink_message_t mes
         }
     }
 
+    // Try to auto-detect signing key from incoming signed packets
+    if (MAVLinkSigning::isMessageSigned(message) && !MAVLinkSigning::isSigningEnabled(static_cast<mavlink_channel_t>(link->mavlinkChannel()))) {
+        const QString detectedKeyName = MAVLinkSigning::tryDetectKey(static_cast<mavlink_channel_t>(link->mavlinkChannel()), message);
+        if (!detectedKeyName.isEmpty() && link == vehicleLinkManager()->primaryLink().lock().get()) {
+            _mavlinkSigningKeyName = detectedKeyName;
+            emit mavlinkSigningChanged();
+        }
+    }
+
     // We give the link manager first whack since it it reponsible for adding new links
     _vehicleLinkManager->mavlinkMessageReceived(link, message);
 
@@ -580,6 +590,38 @@ void Vehicle::_mavlinkMessageReceived(LinkInterface* link, mavlink_message_t mes
         break;
     case MAVLINK_MSG_ID_RC_CHANNELS:
         _handleRCChannels(message);
+        break;
+    case MAVLINK_MSG_ID_SERVO_OUTPUT_RAW:
+    {
+        mavlink_servo_output_raw_t servoOutputRaw;
+        mavlink_msg_servo_output_raw_decode(&message, &servoOutputRaw);
+
+        // ArduPilot commonly publishes servo1_raw..servo16_raw in a single packet (port may remain 0).
+        const uint16_t rawValues[16] = {
+            servoOutputRaw.servo1_raw,
+            servoOutputRaw.servo2_raw,
+            servoOutputRaw.servo3_raw,
+            servoOutputRaw.servo4_raw,
+            servoOutputRaw.servo5_raw,
+            servoOutputRaw.servo6_raw,
+            servoOutputRaw.servo7_raw,
+            servoOutputRaw.servo8_raw,
+            servoOutputRaw.servo9_raw,
+            servoOutputRaw.servo10_raw,
+            servoOutputRaw.servo11_raw,
+            servoOutputRaw.servo12_raw,
+            servoOutputRaw.servo13_raw,
+            servoOutputRaw.servo14_raw,
+            servoOutputRaw.servo15_raw,
+            servoOutputRaw.servo16_raw
+        };
+
+        for (int servoIndex = 0; servoIndex < _servoOutputRawValues.size() && servoIndex < 16; servoIndex++) {
+            _servoOutputRawValues[servoIndex] = (rawValues[servoIndex] == UINT16_MAX) ? -1 : static_cast<int>(rawValues[servoIndex]);
+        }
+
+        emit servoOutputsChanged(_servoOutputRawValues);
+    }
         break;
     case MAVLINK_MSG_ID_BATTERY_STATUS:
         _handleBatteryStatus(message);
@@ -772,6 +814,10 @@ void Vehicle::_handleCameraImageCaptured(const mavlink_message_t& message)
 // TODO: VehicleFactGroup
 void Vehicle::_handleGpsRawInt(mavlink_message_t& message)
 {
+    if (message.compid != _defaultComponentId) {
+        return;
+    }
+
     mavlink_gps_raw_int_t gpsRawInt;
     mavlink_msg_gps_raw_int_decode(&message, &gpsRawInt);
 
@@ -794,6 +840,10 @@ void Vehicle::_handleGpsRawInt(mavlink_message_t& message)
 // TODO: VehicleFactGroup
 void Vehicle::_handleGlobalPositionInt(mavlink_message_t& message)
 {
+    if (message.compid != _defaultComponentId) {
+        return;
+    }
+
     mavlink_global_position_int_t globalPositionInt;
     mavlink_msg_global_position_int_decode(&message, &globalPositionInt);
 
@@ -959,6 +1009,10 @@ QString Vehicle::vehicleUIDStr()
 
 void Vehicle::_handleExtendedSysState(mavlink_message_t& message)
 {
+    if (message.compid != _defaultComponentId) {
+        return;
+    }
+
     mavlink_extended_sys_state_t extendedState;
     mavlink_msg_extended_sys_state_decode(&message, &extendedState);
 
@@ -1124,6 +1178,10 @@ void Vehicle::_setHomePosition(QGeoCoordinate& homeCoord)
 
 void Vehicle::_handleHomePosition(mavlink_message_t& message)
 {
+    if (message.compid != _defaultComponentId) {
+        return;
+    }
+
     mavlink_home_position_t homePos;
 
     mavlink_msg_home_position_decode(&message, &homePos);
@@ -1378,6 +1436,10 @@ void Vehicle::_handleHeartbeat(mavlink_message_t& message)
 
 void Vehicle::_handleCurrentMode(mavlink_message_t& message)
 {
+    if (message.compid != _defaultComponentId) {
+        return;
+    }
+
     mavlink_current_mode_t currentMode;
     mavlink_msg_current_mode_decode(&message, &currentMode);
     if (currentMode.intended_custom_mode != 0) { // 0 == unknown/not supplied
@@ -1930,7 +1992,10 @@ QString Vehicle::_vehicleIdSpeech()
 
 void Vehicle::_handleFlightModeChanged(const QString& flightMode)
 {
-    _say(tr("%1 %2 flight mode").arg(_vehicleIdSpeech()).arg(flightMode));
+    if (flightMode != _lastAnnouncedFlightMode) {
+        _lastAnnouncedFlightMode = flightMode;
+        _say(tr("%1 %2 flight mode").arg(_vehicleIdSpeech()).arg(flightMode));
+    }
     emit guidedModeChanged(_firmwarePlugin->isGuidedMode(this));
 }
 
@@ -3379,16 +3444,6 @@ void Vehicle::motorTest(int motor, int percent, int timeoutSecs, bool showError)
     sendMavCommand(_defaultComponentId, MAV_CMD_DO_MOTOR_TEST, showError, motor, MOTOR_TEST_THROTTLE_PERCENT, percent, timeoutSecs, 0, MOTOR_TEST_ORDER_BOARD);
 }
 
-QString Vehicle::brandImageIndoor() const
-{
-    return _firmwarePlugin->brandImageIndoor(this);
-}
-
-QString Vehicle::brandImageOutdoor() const
-{
-    return _firmwarePlugin->brandImageOutdoor(this);
-}
-
 void Vehicle::setOfflineEditingDefaultComponentId(int defaultComponentId)
 {
     if (_offlineEditingVehicle) {
@@ -3681,6 +3736,20 @@ void Vehicle::_mavlinkMessageStatus(int uasId, uint64_t totalSent, uint64_t tota
         _mavlinkLossCount       = totalLoss;
         _mavlinkLossPercent     = lossPercent;
         emit mavlinkStatusChanged();
+
+        // Update signing status from the primary link's channel
+        bool signing = false;
+        SharedLinkInterfacePtr sharedLink = vehicleLinkManager()->primaryLink().lock();
+        if (sharedLink) {
+            signing = MAVLinkSigning::isSigningEnabled(static_cast<mavlink_channel_t>(sharedLink->mavlinkChannel()));
+        }
+        if (signing != _mavlinkSigning) {
+            _mavlinkSigning = signing;
+            if (!signing) {
+                _mavlinkSigningKeyName.clear();
+            }
+            emit mavlinkSigningChanged();
+        }
     }
 }
 
@@ -4528,7 +4597,50 @@ void Vehicle::_errorMessageReceived(QString message)
 /*                                 Signing                                   */
 /*===========================================================================*/
 
-void Vehicle::sendSetupSigning()
+void Vehicle::sendSetupSigning(int keyIndex)
+{
+    SharedLinkInterfacePtr sharedLink = vehicleLinkManager()->primaryLink().lock();
+    if (!sharedLink) {
+        qCDebug(VehicleLog) << "Primary Link Gone!";
+        return;
+    }
+
+    const QByteArray keyBytes = MAVLinkSigningKeys::instance()->keyBytesAt(keyIndex);
+    if (keyBytes.isEmpty()) {
+        qCCritical(VehicleLog) << "Invalid key index:" << keyIndex;
+        return;
+    }
+
+    const mavlink_channel_t channel = static_cast<mavlink_channel_t>(sharedLink->mavlinkChannel());
+
+    mavlink_setup_signing_t setup_signing;
+
+    mavlink_system_t target_system;
+    target_system.sysid = id();
+    target_system.compid = defaultComponentId();
+
+    MAVLinkSigning::createSetupSigning(channel, target_system, keyBytes, setup_signing);
+
+    // Also configure signing on our channel with this key so outgoing packets are signed
+    if (!MAVLinkSigning::initSigning(channel, keyBytes, MAVLinkSigning::insecureConnectionAcceptUnsignedCallback)) {
+        qCCritical(VehicleLog) << "Internal error: failed to initialize signing on channel" << channel;
+        return;
+    }
+
+    _mavlinkSigning = true;
+    _mavlinkSigningKeyName = MAVLinkSigningKeys::instance()->keyNameAt(keyIndex);
+    emit mavlinkSigningChanged();
+
+    mavlink_message_t msg;
+    (void) mavlink_msg_setup_signing_encode_chan(MAVLinkProtocol::instance()->getSystemId(), MAVLinkProtocol::getComponentId(), channel, &msg, &setup_signing);
+
+    // Since we don't get an ack back that the message was received send twice to try to make sure it makes it to the vehicle
+    for (uint8_t i = 0; i < 2; ++i) {
+        sendMessageOnLinkThreadSafe(sharedLink.get(), msg);
+    }
+}
+
+void Vehicle::sendDisableSigning()
 {
     SharedLinkInterfacePtr sharedLink = vehicleLinkManager()->primaryLink().lock();
     if (!sharedLink) {
@@ -4544,15 +4656,21 @@ void Vehicle::sendSetupSigning()
     target_system.sysid = id();
     target_system.compid = defaultComponentId();
 
-    MAVLinkSigning::createSetupSigning(channel, target_system, setup_signing);
+    MAVLinkSigning::createDisableSigning(target_system, setup_signing);
 
     mavlink_message_t msg;
     (void) mavlink_msg_setup_signing_encode_chan(MAVLinkProtocol::instance()->getSystemId(), MAVLinkProtocol::getComponentId(), channel, &msg, &setup_signing);
 
-    // Since we don't get an ack back that the message was received send twice to try to make sure it makes it to the vehicle
     for (uint8_t i = 0; i < 2; ++i) {
         sendMessageOnLinkThreadSafe(sharedLink.get(), msg);
     }
+
+    // Disable signing on the local channel so we stop signing outgoing packets
+    MAVLinkSigning::initSigning(channel, QByteArrayView(), nullptr);
+
+    _mavlinkSigning = false;
+    _mavlinkSigningKeyName.clear();
+    emit mavlinkSigningChanged();
 }
 
 /*---------------------------------------------------------------------------*/

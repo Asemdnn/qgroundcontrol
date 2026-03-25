@@ -9,7 +9,11 @@ target_sources(${CMAKE_PROJECT_NAME}
         APMAirframeComponent.h
         APMAirframeComponentController.cc
         APMAirframeComponentController.h
+        APMAirspeedComponent.cc
+        APMAirspeedComponent.h
         APMAutoPilotPlugin.cc
+        APMESCComponent.cc
+        APMESCComponent.h
         APMAutoPilotPlugin.h
         APMFlightModesComponent.cc
         APMFlightModesComponent.h
@@ -27,6 +31,8 @@ target_sources(${CMAKE_PROJECT_NAME}
         APMLightsComponent.h
         APMMotorComponent.cc
         APMMotorComponent.h
+        APMServoComponent.cc
+        APMServoComponent.h
         APMPowerComponent.cc
         APMPowerComponent.h
         APMRadioComponent.cc
@@ -61,6 +67,11 @@ qt_add_qml_module(AutoPilotPluginsAPMModule
     QML_FILES
         APMAirframeComponent.qml
         APMAirframeComponentSummary.qml
+        APMAirspeedComponent.qml
+        APMAirspeedComponentSummary.qml
+        APMBatteryParams.qml
+        APMESCComponent.qml
+        APMESCComponentSummary.qml
         APMFlightModesComponent.qml
         APMFlightModesComponentSummary.qml
         APMFollowComponent.qml
@@ -72,6 +83,7 @@ qt_add_qml_module(AutoPilotPluginsAPMModule
         APMLightsComponent.qml
         APMLightsComponentSummary.qml
         APMMotorComponent.qml
+        APMServoComponent.qml
         APMNotSupported.qml
         APMPowerComponent.qml
         APMPowerComponentSummary.qml

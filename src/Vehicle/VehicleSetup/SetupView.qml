@@ -131,15 +131,30 @@ Rectangle {
     Component {
         id: disconnectedVehicleAndParamsSummaryComponent
         Rectangle {
+            id: disconnectedRect
             color: qgcPal.windowShade
-            QGCLabel {
-                anchors.margins:        _defaultTextWidth * 2
-                anchors.fill:           parent
-                verticalAlignment:      Text.AlignVCenter
-                horizontalAlignment:    Text.AlignHCenter
-                wrapMode:               Text.WordWrap
-                font.pointSize:         ScreenTools.largeFontPointSize
-                text:                   qsTr("Vehicle configuration pages will display after you connect your vehicle and parameters have been downloaded.")
+            Column {
+                anchors.centerIn:   parent
+                spacing:            ScreenTools.defaultFontPixelHeight
+                QGCLabel {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width:              disconnectedRect.width - _defaultTextWidth * 4
+                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode:           Text.WordWrap
+                    font.pointSize:     ScreenTools.largeFontPointSize
+                    text:               !_activeVehicle
+                                            ? qsTr("Vehicle configuration pages will display after you connect your vehicle and parameters have been downloaded.")
+                                            : (_activeVehicle.parameterManager.parameterDownloadSkipped
+                                                ? qsTr("Parameter download was skipped because the vehicle is flying. Configuration pages will be available after parameters are downloaded.")
+                                                : qsTr("Waiting for vehicle parameters to download…"))
+                }
+                QGCButton {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text:       qsTr("Download Parameters")
+                    visible:    _activeVehicle && _activeVehicle.parameterManager.parameterDownloadSkipped
+                    enabled:    _activeVehicle && _activeVehicle.parameterManager.parameterDownloadSkipped && _activeVehicle.parameterManager.loadProgress === 0
+                    onClicked:  _activeVehicle.parameterManager.refreshAllParameters()
+                }
             }
         }
     }
@@ -193,7 +208,7 @@ Rectangle {
 
         ColumnLayout {
             id:         buttonColumn
-            spacing:    ScreenTools.defaultFontPixelHeight / 4
+            spacing:    0
 
             ConfigButton {
                 id:                 summaryButton
@@ -205,12 +220,7 @@ Rectangle {
                 onClicked: showSummaryPanel()
             }
 
-            ConfigButton {
-                visible:            _activeVehicle ? _activeVehicle.flowImageIndex > 0 : false
-                text:               qsTr("Optical Flow")
-                Layout.fillWidth:   true
-                onClicked:          showPanel(this, "qrc:/qml/QGroundControl/VehicleSetup/OpticalFlowSensor.qml");
-            }
+            Item { Layout.fillWidth: true; Layout.preferredHeight: ScreenTools.defaultFontPixelHeight / 2 }
 
             Repeater {
                 id:     componentRepeater
@@ -227,6 +237,15 @@ Rectangle {
                     property var componentUrl: modelData
                 }
             }
+
+            ConfigButton {
+                visible:            _activeVehicle ? _activeVehicle.flowImageIndex > 0 : false
+                text:               qsTr("Optical Flow")
+                Layout.fillWidth:   true
+                onClicked:          showPanel(this, "qrc:/qml/QGroundControl/VehicleSetup/OpticalFlowSensor.qml");
+            }
+
+            Item { Layout.fillWidth: true; Layout.preferredHeight: ScreenTools.defaultFontPixelHeight / 2 }
 
             ConfigButton {
                 id:                 parametersButton

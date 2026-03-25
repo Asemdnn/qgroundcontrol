@@ -27,6 +27,7 @@ Q_DECLARE_LOGGING_CATEGORY(MockLinkVerboseLog)
 class MockLink : public LinkInterface
 {
     Q_OBJECT
+    friend class MockLinkFTP;
 
 public:
     explicit MockLink(SharedLinkConfigurationPtr &config, QObject *parent = nullptr);
@@ -52,12 +53,18 @@ public:
     double vehicleLongitude() const { return _vehicleLongitude; }
     double vehicleAltitudeAMSL() const { return _vehicleAltitudeAMSL; }
 
+    bool signingEnabled() const { return _signingEnabled; }
+
     /// Sends the specified mavlink message to QGC
     void respondWithMavlinkMessage(const mavlink_message_t &msg);
 
     MockLinkFTP *mockLinkFTP() const;
 
-    /// Sets a failure mode for unit testingqgcm
+    /// Set the armed state of the simulated vehicle
+    void setArmed(bool armed) { if (armed) _mavBaseMode |= MAV_MODE_FLAG_SAFETY_ARMED; else _mavBaseMode &= ~MAV_MODE_FLAG_SAFETY_ARMED; }
+    bool armed() const { return (_mavBaseMode & MAV_MODE_FLAG_SAFETY_ARMED) != 0; }
+
+    /// Sets a failure mode for unit testing
     ///     @param failureMode Type of failure to simulate
     ///     @param failureAckResult Error to send if one the ack error modes
     void setMissionItemFailureMode(MockLinkMissionItemHandler::FailureMode_t failureMode, MAV_MISSION_RESULT failureAckResult) const { _missionItemHandler->setFailureMode(failureMode, failureAckResult); }
@@ -85,8 +92,9 @@ public:
     int receivedRequestMessageCount(int compId, int messageId) const { return _receivedRequestMessageByCompAndMsgCountMap.value(compId).value(messageId, 0); }
     void clearReceivedRequestMessageCounts() { _receivedRequestMessageCountMap.clear(); _receivedRequestMessageByCompAndMsgCountMap.clear(); }
     int receivedRequestMessageCount(uint32_t messageId) const { return _receivedRequestMessageCountMap.value(messageId, 0); }
-    void clearReceivedMavlinkMessageCounts() { _receivedMavlinkMessageCountMap.clear(); _hashCheckRequestCount = 0; }
+    void clearReceivedMavlinkMessageCounts() { _receivedMavlinkMessageCountMap.clear(); _hashCheckRequestCount = 0; _missionItemHandler->clearRequestListCounts(); }
     int receivedMavlinkMessageCount(uint32_t messageId) const { return _receivedMavlinkMessageCountMap.value(messageId, 0); }
+    int receivedMissionRequestListCount(MAV_MISSION_TYPE type) const { return _missionItemHandler->requestListCount(type); }
 
     enum RequestMessageFailureMode_t {
         FailRequestMessageNone,
@@ -208,6 +216,7 @@ private:
     void _handleLogRequestList(const mavlink_message_t &msg);
     void _handleLogRequestData(const mavlink_message_t &msg);
     void _handleParamMapRC(const mavlink_message_t &msg);
+    void _handleSetupSigning(const mavlink_message_t &msg);
     void _handleRequestMessage(const mavlink_command_long_t &request, bool &accepted, bool &noAck);
     void _handleRequestMessageAutopilotVersion(const mavlink_command_long_t &request, bool &accepted);
     void _handleRequestMessageDebug(const mavlink_command_long_t &request, bool &accepted, bool &noAck);
@@ -289,6 +298,7 @@ private:
 
     double _vehicleAltitudeAMSL = _defaultVehicleHomeAltitude;
     bool _commLost = false;
+    bool _signingEnabled = false;
     bool _highLatencyTransmissionEnabled = true;
 
     int _sendHomePositionDelayCount = 10;               ///< No home position for 4 seconds
