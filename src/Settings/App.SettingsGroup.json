@@ -82,11 +82,16 @@
     "userMax":          121.92
 },
 {
-    "name":             "audioMuted",
-    "shortDesc": "Mute audio output",
-    "longDesc":  "If this option is enabled all audio output will be muted.",
-    "type":             "bool",
-    "default":     false
+    "name":      "audioVolume",
+    "shortDesc": "Audio output volume",
+    "longDesc":  "Sets the audio output volume percentage. Set to 0 to mute.",
+    "type":      "double",
+    "default":   100.0,
+    "units":     "%",
+    "min":       0.0,
+    "decimalPlaces": 1,
+    "userMin":  0.0,
+    "userMax":  100.0
 },
 {
     "name":             "virtualJoystick",

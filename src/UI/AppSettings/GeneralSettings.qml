@@ -12,6 +12,7 @@ SettingsPage {
     property var    _appSettings:               _settingsManager.appSettings
     property Fact   _appFontPointSize:          _appSettings.appFontPointSize
     property Fact   _appSavePath:               _appSettings.savePath
+    property Fact   _audioVolume:               _appSettings.audioVolume
 
     SettingsGroupLayout {
         Layout.fillWidth:   true
@@ -38,12 +39,26 @@ SettingsPage {
             visible:    _appSettings.followTarget.visible
         }
 
-        FactCheckBoxSlider {
-            Layout.fillWidth: true
-            text:           qsTr("Mute all audio output")
-            fact:       _audioMuted
-            visible:    _audioMuted.visible
-            property Fact _audioMuted: _appSettings.audioMuted
+        RowLayout {
+            Layout.fillWidth:   true
+            spacing:            ScreenTools.defaultFontPixelWidth
+            visible:            _audioVolume.visible
+
+            FactTextFieldSlider {
+                Layout.fillWidth:   true
+                label:              qsTr("Audio Output")
+                fact:               _audioVolume
+                showEnableCheckbox: true
+                enableCheckBoxChecked: _audioVolume.rawValue > 0.0
+
+                onEnableCheckboxClicked: _audioVolume.rawValue = enableCheckBoxChecked ? 100 : 0
+            }
+
+            QGCButton {
+                text:       qsTr("Test")
+                onClicked:  QGroundControl.testAudioOutput()
+                enabled:    _audioVolume.rawValue > 0.0
+            }
         }
 
         FactCheckBoxSlider {
