@@ -7,7 +7,7 @@
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Qt Multimedia for iOS uses the camera and microphone.</string>
 	<key>CFBundleDisplayName</key>
-	<string>QGroundControl</string>
+	<string>DIGS</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>NSHumanReadableCopyright</key>
