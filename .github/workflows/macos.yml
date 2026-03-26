@@ -54,6 +54,10 @@ jobs:
       run:
         shell: bash
 
+    env:
+      HAS_SIGNING_SECRETS: ${{ secrets.MACOS_CERT_P12_BASE64 != '' }}
+      HAS_AWS_SECRETS: ${{ secrets.AWS_ACCESS_KEY_ID != '' }}
+
     steps:
       - name: Checkout repo
         uses: actions/checkout@v6
@@ -84,7 +88,7 @@ jobs:
           build-dir: ${{ runner.temp }}/build
           build-type: ${{ matrix.build_type }}
           stable: ${{ (github.ref_type == 'tag' || contains(github.ref, 'Stable')) && 'true' || 'false' }}
-          extra-args: -DQGC_MACOS_SIGN_WITH_IDENTITY=${{ github.event_name != 'pull_request' && 'ON' || 'OFF' }}
+          extra-args: -DQGC_MACOS_SIGN_WITH_IDENTITY=${{ github.event_name != 'pull_request' && env.HAS_SIGNING_SECRETS == 'true' && 'ON' || 'OFF' }}
 
       - name: Build
         uses: ./.github/actions/cmake-build
@@ -107,14 +111,14 @@ jobs:
           build-dir: ${{ runner.temp }}/build
 
       - name: Import Code Signing Certificate
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && env.HAS_SIGNING_SECRETS == 'true'
         uses: apple-actions/import-codesign-certs@v6
         with:
           p12-file-base64: ${{ secrets.MACOS_CERT_P12_BASE64 }}
           p12-password: ${{ secrets.MACOS_CERT_P12_PASSWORD }}
 
       - name: Create signed/notarized/stapled app bundle
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && env.HAS_SIGNING_SECRETS == 'true'
         working-directory: ${{ runner.temp }}/build
         run: cmake --install . --config ${{ matrix.build_type }}
         env:
@@ -124,7 +128,7 @@ jobs:
           QGC_MACOS_NOTARIZATION_TEAM_ID: ${{ secrets.MACOS_NOTARIZATION_TEAM_ID }}
 
       - name: Create unsigned app bundle
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' || env.HAS_SIGNING_SECRETS != 'true'
         working-directory: ${{ runner.temp }}/build
         run: cmake --install . --config ${{ matrix.build_type }}
 
@@ -143,7 +147,7 @@ jobs:
           binary-path: /Volumes/QGroundControl/QGroundControl.app/Contents/MacOS/QGroundControl
 
       - name: Attest and Upload
-        if: matrix.build_type == 'Release'
+        if: matrix.build_type == 'Release' && env.HAS_AWS_SECRETS == 'true'
         uses: ./.github/actions/attest-and-upload
         with:
           artifact-name: QGroundControl.dmg
