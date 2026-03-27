@@ -15,9 +15,9 @@
   <summary>@QGC_APP_DESCRIPTION@</summary>
   <description>
     <p>
-      QGroundControl (QGC) is a highly intuitive and powerful Ground Control Station (GCS) designed for UAVs.
+      DIGS is a highly intuitive and powerful Ground Control Station (GCS) designed for UAVs.
       Whether you're a first-time pilot or an experienced professional,
-      QGC provides a seamless user experience for flight control and mission planning,
+      DIGS provides a seamless user experience for flight control and mission planning,
       making it the go-to solution for any MAVLink-enabled drone.
     </p>
   </description>

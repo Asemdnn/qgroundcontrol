@@ -69,8 +69,8 @@ jobs:
         with:
           name: qgc-binary
           path: |
-            build/QGroundControl
-            build/Release/QGroundControl
+            build/DIGS
+            build/Release/DIGS
           if-no-files-found: error
           retention-days: 1
           compression-level: 0
@@ -120,7 +120,7 @@ jobs:
           path: build
 
       - name: Make binary executable
-        run: chmod +x build/QGroundControl build/Release/QGroundControl 2>/dev/null || true
+        run: chmod +x build/DIGS build/Release/DIGS 2>/dev/null || true
 
       - name: Run benchmarks
         uses: ./.github/actions/benchmark-runner
