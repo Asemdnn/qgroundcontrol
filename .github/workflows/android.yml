@@ -242,9 +242,16 @@ jobs:
         run: |
           echo "=== Disk space before cleanup ==="
           df -h /
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android/sdk/ndk/!($(basename "$ANDROID_NDK_ROOT")) \
-            /opt/ghc /usr/local/share/boost /usr/share/swift \
-            "$AGENT_TOOLSDIRECTORY" 2>/dev/null || true
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost \
+            /usr/share/swift "$AGENT_TOOLSDIRECTORY" 2>/dev/null || true
+          # Remove unused NDK versions but keep the one in use
+          if [ -d /usr/local/lib/android/sdk/ndk ]; then
+            KEEP="$(basename "$ANDROID_NDK_ROOT")"
+            for d in /usr/local/lib/android/sdk/ndk/*/; do
+              [ "$(basename "$d")" = "$KEEP" ] && continue
+              sudo rm -rf "$d"
+            done
+          fi
           sudo apt-get clean 2>/dev/null || true
           echo "=== Disk space after cleanup ==="
           df -h /
