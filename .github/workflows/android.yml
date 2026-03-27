@@ -236,6 +236,30 @@ jobs:
           fi
           cp "${APK_DIR}"/*.apk "${TEMP_DIR}/build/${{ env.PACKAGE }}.apk"
 
+      - name: Free Disk Space for Emulator
+        if: ${{ matrix.emulator }}
+        shell: bash
+        run: |
+          echo "=== Disk space before cleanup ==="
+          df -h /
+          # NOTE: Do NOT remove $AGENT_TOOLSDIRECTORY (/opt/hostedtoolcache) here.
+          # It contains the Java and Python installations required by
+          # reactivecircus/android-emulator-runner (sdkmanager, avdmanager)
+          # and by the boot-test script.
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost \
+            /usr/share/swift 2>/dev/null || true
+          # Remove unused NDK versions but keep the one in use
+          if [ -d /usr/local/lib/android/sdk/ndk ]; then
+            KEEP="$(basename "$ANDROID_NDK_ROOT")"
+            for d in /usr/local/lib/android/sdk/ndk/*/; do
+              [ "$(basename "$d")" = "$KEEP" ] && continue
+              sudo rm -rf "$d"
+            done
+          fi
+          sudo apt-get clean 2>/dev/null || true
+          echo "=== Disk space after cleanup ==="
+          df -h /
+
       - name: Enable KVM
         if: ${{ matrix.emulator }}
         run: |
