@@ -74,9 +74,9 @@ runs:
         QT_OUTDIR: ${{ inputs.dir }}/Qt
         QT_MODULES: ${{ inputs.modules }}
         QT_ARCHIVES: ${{ inputs.archives }}
+        ARCH_DIR: ${{ steps.qt-meta.outputs.arch_dir }}
       run: |
         # Check if Qt is already installed (cache-hit may be inaccurate on HTTP 400)
-        ARCH_DIR=$(python3 "${GITHUB_WORKSPACE}/tools/setup/install_qt.py" resolve-arch --arch "${QT_ARCH}")
         QT_ROOT="${QT_OUTDIR}/${QT_VERSION}/${ARCH_DIR}"
         if [ -d "${QT_ROOT}" ] && [ -f "${QT_ROOT}/bin/qmake" ]; then
           echo "Qt found at ${QT_ROOT} (cache-hit=${{ steps.qt-cache.outputs.cache-hit }})"
