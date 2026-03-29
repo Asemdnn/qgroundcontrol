@@ -79,10 +79,23 @@ runs:
         # Check if Qt is already installed (cache-hit may be inaccurate on HTTP 400)
         QT_ROOT="${QT_OUTDIR}/${QT_VERSION}/${ARCH_DIR}"
         if [ -d "${QT_ROOT}" ] && [ -f "${QT_ROOT}/bin/qmake" ]; then
-          echo "Qt found at ${QT_ROOT} (cache-hit=${{ steps.qt-cache.outputs.cache-hit }})"
-          echo "qt_root_dir=${QT_ROOT}" >> "$GITHUB_OUTPUT"
-          echo "qt_bin_dir=${QT_ROOT}/bin" >> "$GITHUB_OUTPUT"
-          echo "Skipping Qt installation - already available"
+          # Verify critical modules are present (not just the Qt base)
+          if [ -f "${QT_ROOT}/lib/cmake/Qt6Charts/Qt6ChartsConfig.cmake" ]; then
+            echo "Qt found at ${QT_ROOT} (cache-hit=${{ steps.qt-cache.outputs.cache-hit }})"
+            echo "qt_root_dir=${QT_ROOT}" >> "$GITHUB_OUTPUT"
+            echo "qt_bin_dir=${QT_ROOT}/bin" >> "$GITHUB_OUTPUT"
+            echo "Skipping Qt installation - already available"
+          else
+            echo "Qt directory exists but Charts module missing - reinstalling"
+            python3 "${GITHUB_WORKSPACE}/tools/setup/install_qt.py" install \
+              --version "${QT_VERSION}" \
+              --host "${QT_HOST}" \
+              --target "${QT_TARGET}" \
+              --arch "${QT_ARCH}" \
+              --outdir "${QT_OUTDIR}" \
+              --modules "${QT_MODULES}" \
+              --archives "${QT_ARCHIVES}"
+          fi
         else
           echo "Installing Qt ${QT_VERSION} (cache-hit=${{ steps.qt-cache.outputs.cache-hit }}, path=${QT_ROOT})"
           python3 "${GITHUB_WORKSPACE}/tools/setup/install_qt.py" install \
