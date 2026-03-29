@@ -62,9 +62,6 @@ runs:
           qt-${{ runner.os }}-${{ inputs.host }}-${{ inputs.target }}-${{ inputs.arch }}-${{ inputs.version }}-
           qt-${{ runner.os }}-${{ inputs.host }}-${{ inputs.target }}-${{ inputs.arch }}-
           qt-${{ runner.os }}-${{ inputs.host }}-${{ inputs.target }}-
-      env:
-        # Ensure cache-hit is false if cache restore fails (e.g., HTTP 400)
-        ACTIONS_CACHE_RESTORE_FAIL_MODE: fail
 
     - name: Install Qt ${{ inputs.version }}
       id: qt-install
