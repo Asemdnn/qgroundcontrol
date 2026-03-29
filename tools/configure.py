@@ -119,6 +119,7 @@ def find_qt_cmake(qt_root: Path | None = None) -> Path | None:
 def configure(config: BuildConfig) -> int:
     """Run CMake configuration."""
     # Determine cmake command
+    qt_cmake = None  # Track whether we found qt-cmake for CMAKE_PREFIX_PATH fallback
     if config.use_qt_cmake:
         qt_cmake = find_qt_cmake(config.qt_root)
         if qt_cmake:
