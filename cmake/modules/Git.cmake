@@ -128,9 +128,9 @@ endif()
 # Strip 'v' prefix if present (e.g., v1.2.3 -> 1.2.3)
 string(REGEX REPLACE "^v" "" QGC_APP_VERSION_CLEAN "${QGC_APP_VERSION}")
 
-# Extract version components using regex
-if(QGC_APP_VERSION_CLEAN MATCHES "^([0-9]+)\\.([0-9]+)\\.([0-9]+)")
-    set(QGC_APP_VERSION "${QGC_APP_VERSION_CLEAN}")
+# Extract version components using regex - handle version with optional suffix (e.g., 1.2.3-stable)
+if(QGC_APP_VERSION_CLEAN MATCHES "^([0-9]+)\\.([0-9]+)\\.([0-9]+)(-.*)?$")
+    set(QGC_APP_VERSION "${CMAKE_MATCH_1}.${CMAKE_MATCH_2}.${CMAKE_MATCH_3}")
     set(QGC_APP_VERSION_MAJOR "${CMAKE_MATCH_1}")
     set(QGC_APP_VERSION_MINOR "${CMAKE_MATCH_2}")
     set(QGC_APP_VERSION_PATCH "${CMAKE_MATCH_3}")
