@@ -58,6 +58,10 @@ runs:
       with:
         path: ${{ inputs.dir }}/Qt/${{ inputs.version }}
         key: qt-${{ runner.os }}-${{ inputs.host }}-${{ inputs.target }}-${{ inputs.arch }}-${{ inputs.version }}-${{ steps.qt-meta.outputs.digest }}
+        restore-keys: |
+          qt-${{ runner.os }}-${{ inputs.host }}-${{ inputs.target }}-${{ inputs.arch }}-${{ inputs.version }}-
+          qt-${{ runner.os }}-${{ inputs.host }}-${{ inputs.target }}-${{ inputs.arch }}-
+          qt-${{ runner.os }}-${{ inputs.host }}-${{ inputs.target }}-
 
     - name: Install Qt ${{ inputs.version }}
       if: steps.qt-cache.outputs.cache-hit != 'true'

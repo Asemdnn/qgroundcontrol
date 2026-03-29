@@ -118,7 +118,17 @@ def cmd_configure(args: argparse.Namespace) -> None:
         cmd.extend(args.extra_args.split())
 
     start = time.monotonic()
-    result = subprocess.run(cmd, check=False)
+    result = subprocess.run(
+        cmd,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    # Print stdout/stderr for CI visibility
+    if result.stdout:
+        print(result.stdout, end="")
+    if result.stderr:
+        print(result.stderr, end="", file=sys.stderr)
     duration = int(time.monotonic() - start)
     print(f"::notice::Configure completed in {duration}s")
     sys.exit(result.returncode)

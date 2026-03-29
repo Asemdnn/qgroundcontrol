@@ -125,7 +125,16 @@ def configure(config: BuildConfig) -> int:
             cmake_cmd = str(qt_cmake)
             print(f"Using: {cmake_cmd}")
         else:
-            print("Warning: qt-cmake not found, using cmake", file=sys.stderr)
+            # Provide helpful diagnostics before falling back to cmake
+            env_qt_root = os.environ.get("QT_ROOT_DIR", "<not set>")
+            print(
+                f"Warning: qt-cmake not found.\n"
+                f"  QT_ROOT_DIR={env_qt_root}\n"
+                f"  config.qt_root={config.qt_root}\n"
+                f"  PATH includes: {[p for p in os.environ.get('PATH', '').split(os.pathsep) if 'qt' in p.lower()][:3]}\n"
+                f"Falling back to cmake (QGC will search CMAKE_PREFIX_PATH).",
+                file=sys.stderr,
+            )
             cmake_cmd = "cmake"
     else:
         cmake_cmd = "cmake"
@@ -141,6 +150,14 @@ def configure(config: BuildConfig) -> int:
         config.generator,
         f"-DCMAKE_BUILD_TYPE={config.build_type}",
     ]
+
+    # Fallback: set CMAKE_PREFIX_PATH from QT_ROOT_DIR if qt-cmake not found
+    # This helps cmake find Qt even without qt-cmake wrapper
+    if not qt_cmake and os.environ.get("QT_ROOT_DIR"):
+        qt_root = os.environ.get("QT_ROOT_DIR")
+        if qt_root:
+            args.append(f"-DCMAKE_PREFIX_PATH={qt_root}")
+            print(f"Added CMAKE_PREFIX_PATH={qt_root}")
 
     # Feature flags
     if config.testing:
