@@ -142,6 +142,8 @@ runs:
           ccache-${{ inputs.host }}-${{ inputs.target }}-${{ inputs.build-type }}-${{ steps.cache-scope.outputs.scope }}-
           ccache-${{ inputs.host }}-${{ inputs.target }}-${{ inputs.build-type }}-shared-
           ccache-${{ inputs.host }}-${{ inputs.target }}-${{ inputs.build-type }}-
+      env:
+        ACTIONS_CACHE_RESTORE_FAIL_MODE: fail
 
     - name: Restore Build Cache (ccache, read-only)
       if: steps.cache-policy.outputs.save != 'true'
@@ -153,6 +155,8 @@ runs:
           ccache-${{ inputs.host }}-${{ inputs.target }}-${{ inputs.build-type }}-${{ steps.cache-scope.outputs.scope }}-
           ccache-${{ inputs.host }}-${{ inputs.target }}-${{ inputs.build-type }}-shared-
           ccache-${{ inputs.host }}-${{ inputs.target }}-${{ inputs.build-type }}-
+      env:
+        ACTIONS_CACHE_RESTORE_FAIL_MODE: fail
 
     - name: Initialize ccache stats
       shell: bash
@@ -168,6 +172,8 @@ runs:
           cpm-modules-${{ steps.cache-scope.outputs.scope }}-
           cpm-modules-shared-
           cpm-modules-
+      env:
+        ACTIONS_CACHE_RESTORE_FAIL_MODE: fail
 
     - name: Cache CPM Modules (restore only)
       if: inputs.cpm-modules != '' && steps.cache-policy.outputs.save != 'true'
@@ -179,3 +185,5 @@ runs:
           cpm-modules-${{ steps.cache-scope.outputs.scope }}-
           cpm-modules-shared-
           cpm-modules-
+      env:
+        ACTIONS_CACHE_RESTORE_FAIL_MODE: fail
