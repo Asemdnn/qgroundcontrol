@@ -6,10 +6,10 @@ outputs:
     value: ${{ steps.qt-meta.outputs.arch_dir }}
   qt_root_dir:
     description: Absolute Qt root directory
-    value: ${{ steps.qt-install.outputs.qt_root_dir || steps.qt-cached.outputs.qt_root_dir }}
+    value: ${{ steps.qt-install.outputs.qt_root_dir }}
   qt_bin_dir:
     description: Qt bin directory
-    value: ${{ steps.qt-install.outputs.qt_bin_dir || steps.qt-cached.outputs.qt_bin_dir }}
+    value: ${{ steps.qt-install.outputs.qt_bin_dir }}
 inputs:
   version:
     description: Qt version to install
@@ -67,7 +67,6 @@ runs:
         ACTIONS_CACHE_RESTORE_FAIL_MODE: fail
 
     - name: Install Qt ${{ inputs.version }}
-      if: steps.qt-cache.outputs.cache-hit != 'true'
       id: qt-install
       shell: bash
       env:
@@ -79,33 +78,31 @@ runs:
         QT_MODULES: ${{ inputs.modules }}
         QT_ARCHIVES: ${{ inputs.archives }}
       run: |
-        python3 "${GITHUB_WORKSPACE}/tools/setup/install_qt.py" install \
-          --version "${QT_VERSION}" \
-          --host "${QT_HOST}" \
-          --target "${QT_TARGET}" \
-          --arch "${QT_ARCH}" \
-          --outdir "${QT_OUTDIR}" \
-          --modules "${QT_MODULES}" \
-          --archives "${QT_ARCHIVES}"
-
-    - name: Resolve Qt paths (cache hit)
-      if: steps.qt-cache.outputs.cache-hit == 'true'
-      id: qt-cached
-      shell: bash
-      env:
-        QT_OUTDIR: ${{ inputs.dir }}/Qt
-        QT_VERSION: ${{ inputs.version }}
-        ARCH_DIR: ${{ steps.qt-meta.outputs.arch_dir }}
-      run: |
-        qt_root="${QT_OUTDIR}/${QT_VERSION}/${ARCH_DIR}"
-        echo "qt_root_dir=${qt_root}" >> "$GITHUB_OUTPUT"
-        echo "qt_bin_dir=${qt_root}/bin" >> "$GITHUB_OUTPUT"
+        # Check if Qt is already installed (cache-hit may be inaccurate on HTTP 400)
+        ARCH_DIR=$(python3 "${GITHUB_WORKSPACE}/tools/setup/install_qt.py" resolve-arch --arch "${QT_ARCH}")
+        QT_ROOT="${QT_OUTDIR}/${QT_VERSION}/${ARCH_DIR}"
+        if [ -d "${QT_ROOT}" ] && [ -f "${QT_ROOT}/bin/qmake" ]; then
+          echo "Qt found at ${QT_ROOT} (cache-hit=${{ steps.qt-cache.outputs.cache-hit }})"
+          echo "qt_root_dir=${QT_ROOT}" >> "$GITHUB_OUTPUT"
+          echo "qt_bin_dir=${QT_ROOT}/bin" >> "$GITHUB_OUTPUT"
+          echo "Skipping Qt installation - already available"
+        else
+          echo "Installing Qt ${QT_VERSION} (cache-hit=${{ steps.qt-cache.outputs.cache-hit }}, path=${QT_ROOT})"
+          python3 "${GITHUB_WORKSPACE}/tools/setup/install_qt.py" install \
+            --version "${QT_VERSION}" \
+            --host "${QT_HOST}" \
+            --target "${QT_TARGET}" \
+            --arch "${QT_ARCH}" \
+            --outdir "${QT_OUTDIR}" \
+            --modules "${QT_MODULES}" \
+            --archives "${QT_ARCHIVES}"
+        fi
 
     - name: Set Qt environment
       if: ${{ inputs.export-env == 'true' }}
       shell: bash
       run: |
-        qt_root="${{ steps.qt-install.outputs.qt_root_dir || steps.qt-cached.outputs.qt_root_dir }}"
+        qt_root="${{ steps.qt-install.outputs.qt_root_dir }}"
         echo "QT_ROOT_DIR=${qt_root}" >> "$GITHUB_ENV"
         echo "${qt_root}/bin" >> "$GITHUB_PATH"
         echo "Qt installed at ${qt_root}"
