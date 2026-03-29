@@ -89,6 +89,7 @@ jobs:
           build-type: ${{ matrix.build_type }}
           stable: ${{ (github.ref_type == 'tag' || contains(github.ref, 'Stable')) && 'true' || 'false' }}
           extra-args: -DQGC_MACOS_SIGN_WITH_IDENTITY=${{ github.event_name != 'pull_request' && env.HAS_SIGNING_SECRETS == 'true' && 'ON' || 'OFF' }}
+          qt-root-dir: ${{ steps.qt-install.outputs.qt_root_dir }}
 
       - name: Build
         uses: ./.github/actions/cmake-build

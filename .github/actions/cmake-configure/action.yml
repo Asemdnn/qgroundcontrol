@@ -46,6 +46,10 @@ inputs:
     description: 'Use qt-cmake instead of cmake'
     required: false
     default: 'true'
+  qt-root-dir:
+    description: 'Qt root directory path'
+    required: false
+    default: ''
 
 runs:
   using: composite
@@ -58,6 +62,8 @@ runs:
 
     - name: Configure
       shell: bash
+      env:
+        QT_ROOT_DIR: ${{ inputs.qt-root-dir }}
       run: |
         ARGS=(configure
           --source-dir "${{ inputs.source-dir }}"
@@ -73,4 +79,5 @@ runs:
           ARGS+=(--unity-build --unity-batch-size "${{ inputs.unity-batch-size }}")
         fi
         [[ -n "${{ inputs.extra-args }}" ]] && ARGS+=("--extra-args=${{ inputs.extra-args }}")
+        echo "QT_ROOT_DIR is: ${QT_ROOT_DIR}"
         python3 "${GITHUB_WORKSPACE}/.github/scripts/cmake_helper.py" "${ARGS[@]}"
