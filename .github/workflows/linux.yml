@@ -85,6 +85,7 @@ jobs:
           fetch-tags: ${{ github.event_name != 'pull_request' }}
 
       - name: Build Setup
+        id: build-setup
         uses: ./.github/actions/build-setup
         with:
           qt-host: ${{ matrix.host }}
@@ -235,6 +236,7 @@ jobs:
         uses: chetan/git-restore-mtime-action@v2
 
       - name: Build Setup
+        id: build-setup
         uses: ./.github/actions/build-setup
         with:
           restore-timestamps: 'false'
