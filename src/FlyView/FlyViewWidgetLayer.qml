@@ -40,14 +40,14 @@ Item {
         id:                     _totalToolInsets
         leftEdgeTopInset:       toolStrip.leftEdgeTopInset
         leftEdgeCenterInset:    toolStrip.leftEdgeCenterInset
-        leftEdgeBottomInset:    virtualJoystickMultiTouch.visible ? virtualJoystickMultiTouch.leftEdgeBottomInset : parentToolInsets.leftEdgeBottomInset
+        leftEdgeBottomInset:    virtualJoystickMultiTouch.visible ? virtualJoystickMultiTouch.leftEdgeBottomInset : (instrumentPanel.visible ? instrumentPanel.leftEdgeBottomInset : parentToolInsets.leftEdgeBottomInset)
         rightEdgeTopInset:      topRightPanel.rightEdgeTopInset
         rightEdgeCenterInset:   topRightPanel.rightEdgeCenterInset
         rightEdgeBottomInset:   bottomRightRowLayout.rightEdgeBottomInset
         topEdgeLeftInset:       toolStrip.topEdgeLeftInset
         topEdgeCenterInset:     mapScale.topEdgeCenterInset
         topEdgeRightInset:      topRightPanel.topEdgeRightInset
-        bottomEdgeLeftInset:    virtualJoystickMultiTouch.visible ? virtualJoystickMultiTouch.bottomEdgeLeftInset : parentToolInsets.bottomEdgeLeftInset
+        bottomEdgeLeftInset:    virtualJoystickMultiTouch.visible ? virtualJoystickMultiTouch.bottomEdgeLeftInset : (instrumentPanel.visible ? instrumentPanel.bottomEdgeLeftInset : parentToolInsets.bottomEdgeLeftInset)
         bottomEdgeCenterInset:  bottomRightRowLayout.bottomEdgeCenterInset
         bottomEdgeRightInset:   virtualJoystickMultiTouch.visible ? virtualJoystickMultiTouch.bottomEdgeRightInset : bottomRightRowLayout.bottomEdgeRightInset
     }
@@ -73,6 +73,17 @@ Item {
         property real topEdgeRightInset:    childrenRect.height + _layoutMargin
         property real rightEdgeTopInset:    width + _layoutMargin
         property real rightEdgeCenterInset: rightEdgeTopInset
+    }
+
+    FlyViewInstrumentPanel {
+        id:                 instrumentPanel
+        anchors.bottom:     parent.bottom
+        anchors.left:       parent.left
+        anchors.leftMargin: toolStrip.visible ? toolStrip.x + toolStrip.width + _toolsMargin : _toolsMargin
+        visible:            QGroundControl.corePlugin.options.flyView.showInstrumentPanel && _showSingleVehicleUI
+
+        property real leftEdgeBottomInset:  visible ? x + width + _layoutMargin : 0
+        property real bottomEdgeLeftInset:  visible ? height + _layoutMargin : 0
     }
 
     FlyViewBottomRightRowLayout {
