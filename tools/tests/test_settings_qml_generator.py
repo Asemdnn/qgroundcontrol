@@ -102,7 +102,7 @@ class TestLoadPageDef:
         page = load_page_def(_make_page_json(tmp_path, data))
         assert page.groups[0].component == "MyCustomComponent"
         assert page.groups[0].sectionName == "Custom"
-        assert page.groups[0].keywords == "a,b"
+        assert page.groups[0].keywords == ["a", "b"]
 
     def test_loads_showWhen_enableWhen(self, tmp_path: Path):
         data = {
@@ -247,6 +247,19 @@ class TestGeneratePageQml:
         qml = generate_page_qml(page, settings_dir)
         assert "MyCustomWidget {" in qml
         assert "Layout.fillWidth: true" in qml
+        # Component should be wrapped in a ColumnLayout so it doesn't
+        # override the component's own visible: binding.
+        assert "ColumnLayout {" in qml
+        assert "spacing: 0" in qml
+
+    def test_component_group_with_showWhen(self, settings_dir: Path):
+        page = PageDef(groups=[
+            GroupDef(component="MyCustomWidget", showWhen="someFlag"),
+        ])
+        qml = generate_page_qml(page, settings_dir)
+        assert "ColumnLayout {" in qml
+        assert "(someFlag)" in qml
+        assert "MyCustomWidget {" in qml
 
     def test_showWhen_on_group(self, settings_dir: Path):
         page = PageDef(groups=[
@@ -274,7 +287,7 @@ class TestGeneratePageQml:
         ])
         qml = generate_page_qml(page, settings_dir)
         assert "(x === 1)" in qml
-        assert "fact.userVisible" in qml
+        assert "appSettings.enableFeature.userVisible" in qml
 
     def test_enableWhen_on_control(self, settings_dir: Path):
         page = PageDef(groups=[

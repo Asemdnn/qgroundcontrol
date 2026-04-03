@@ -42,21 +42,42 @@ Rectangle {
         var entry = settingsPagesModel.get(pageIndex)
         if (!entry) return []
 
+        // Check English search terms
         var termsStr = entry.searchTerms
-        if (!termsStr || termsStr === "") return []
-
-        try {
-            var terms = JSON.parse(termsStr)
-        } catch(e) {
-            return []
-        }
-
         var matches = []
-        for (var i = 0; i < terms.length; i++) {
-            if (terms[i].terms.indexOf(query) !== -1) {
-                matches.push(terms[i].section)
-            }
+        var matched = {}
+        if (termsStr && termsStr !== "") {
+            try {
+                var terms = JSON.parse(termsStr)
+                for (var i = 0; i < terms.length; i++) {
+                    if (terms[i].terms.indexOf(query) !== -1) {
+                        matched[terms[i].section] = true
+                        matches.push(terms[i].section)
+                    }
+                }
+            } catch(e) {}
         }
+
+        // Check translatable terms (translated at runtime)
+        var trStr = entry.translatableTerms
+        if (trStr && trStr !== "") {
+            try {
+                var trTerms = JSON.parse(trStr)
+                for (var j = 0; j < trTerms.length; j++) {
+                    if (matched[trTerms[j].section]) continue
+                    var ctx = trTerms[j].context
+                    var tList = trTerms[j].terms
+                    for (var k = 0; k < tList.length; k++) {
+                        if (qsTranslate(ctx, tList[k]).toLowerCase().indexOf(query) !== -1) {
+                            matched[trTerms[j].section] = true
+                            matches.push(trTerms[j].section)
+                            break
+                        }
+                    }
+                }
+            } catch(e) {}
+        }
+
         return matches
     }
 
@@ -105,7 +126,7 @@ Rectangle {
         // Find and select the default page
         var targetUrl = globals.commingFromRIDIndicator
             ? "qrc:/qml/QGroundControl/AppSettings/RemoteIDSettings.qml"
-            : "qrc:/qml/QGroundControl/AppSettings/AppSettings.qml"
+            : "qrc:/qml/QGroundControl/AppSettings/GeneralSettings.qml"
         globals.commingFromRIDIndicator = false
 
         for (var i = 0; i < settingsPagesModel.count; i++) {
@@ -217,15 +238,26 @@ Rectangle {
                         onClicked: {
                             if (mainWindow.allowViewSwitch()) {
                                 settingsView._navigateTo(index, -1)
-                                // Auto-expand when selecting a page
-                                if (hasMultipleSections && !isExpanded) {
-                                    settingsView._setExpanded(index, true)
+                                if (hasMultipleSections) {
+                                    // Toggle expand/collapse when re-clicking the same page
+                                    if (isSelected && isExpanded) {
+                                        settingsView._setExpanded(index, false)
+                                    } else if (!isExpanded) {
+                                        settingsView._setExpanded(index, true)
+                                    }
                                 }
                             }
                         }
 
                         onToggleExpand: {
-                            settingsView._setExpanded(index, !isExpanded)
+                            if (!mainWindow.allowViewSwitch()) {
+                                return
+                            }
+                            var expanding = !isExpanded
+                            settingsView._setExpanded(index, expanding)
+                            if (!expanding && isSelected) {
+                                settingsView._navigateTo(index, -1)
+                            }
                         }
                     }
 
@@ -247,8 +279,14 @@ Rectangle {
                                 var matches = settingsView._matchingSections(pageColumn.index)
                                 return matches.indexOf(sectionIndex) !== -1
                             }
+                            property bool sectionContentVisible: {
+                                if (!pageColumn.isSelected) return true
+                                if (!rightPanel.item) return true
+                                if (typeof rightPanel.item.sectionVisible !== "function") return true
+                                return rightPanel.item.sectionVisible(sectionIndex)
+                            }
                             property color textColor: sectionChecked || pressed ? qgcPal.buttonHighlightText : qgcPal.buttonText
-                            visible: sectionMatchesSearch
+                            visible: sectionMatchesSearch && sectionContentVisible
 
                             background: Rectangle {
                                 color:   qgcPal.buttonHighlight

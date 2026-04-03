@@ -1,5 +1,6 @@
 {
     "version": 1,
+    "fileType": "SettingsUI",
     "bindings": {
         "videoSource": "QGroundControl.settingsManager.videoSettings.videoSource.rawValue",
         "autoStreamConfig": "QGroundControl.videoManager.autoStreamConfigured",
@@ -10,6 +11,7 @@
     "groups": [
         {
             "heading": "Video Source",
+            "keywords": ["video source", "camera", "stream"],
             "enableWhen": "!autoStreamConfig",
             "headingDescription": "autoStreamConfig ? qsTr(\"Mavlink camera stream is automatically configured\") : \"\"",
             "controls": [
@@ -21,6 +23,7 @@
         },
         {
             "heading": "Connection",
+            "keywords": ["rtsp", "tcp", "udp", "mpegts", "video url", "stream url"],
             "showWhen": "!sourceDisabled && !autoStreamConfig",
             "controls": [
                 {
@@ -39,6 +42,7 @@
         },
         {
             "heading": "Settings",
+            "keywords": ["aspect ratio", "low latency", "decoder", "hardware decode", "disable when disarmed"],
             "showWhen": "!sourceDisabled",
             "controls": [
                 {
@@ -60,6 +64,7 @@
         },
         {
             "heading": "Local Video Storage",
+            "keywords": ["record", "recording format", "mp4", "mkv", "storage limit", "video file"],
             "controls": [
                 {
                     "setting": "videoSettings.recordingFormat"

@@ -18,17 +18,17 @@ file(GLOB _settings_metadata "${SETTINGS_METADATA_DIR}/*.SettingsGroup.json")
 
 # Generated QML outputs (must match what generate_pages.py produces)
 set(_generated_qml_names
-    ADSBVehicleManagerSettings.qml
-    AppSettings.qml
+    ADSBServerSettings.qml
+    CommLinksSettings.qml
     FlyViewSettings.qml
-    LinkSettings.qml
-    MapSettings.qml
-    MavlinkSettings.qml
+    GeneralSettings.qml
+    MapsSettings.qml
     NTRIPSettings.qml
     PlanViewSettings.qml
     PX4LogTransferSettings.qml
     RemoteIDSettings.qml
     SettingsPagesModel.qml
+    TelemetrySettings.qml
     VideoSettings.qml
     Viewer3DSettings.qml
 )
@@ -79,6 +79,7 @@ qt_add_qml_module(AppSettingsModule
         # Hand-coded pages and components
         BluetoothSettings.qml
         DebugWindow.qml
+        GcsPositionStatus.qml
         HelpSettings.qml
         LinkConfigurationManager.qml
         LogReplaySettings.qml
@@ -99,8 +100,6 @@ qt_add_qml_module(AppSettingsModule
         PX4LogUploadSettings.qml
         QmlTest.qml
         RemoteIDGpsLocation.qml
-        RemoteIDOperatorIDValidation.qml
-        RemoteIDStatusFlags.qml
         SerialSettings.qml
         SettingsPage.qml
         TcpSettings.qml

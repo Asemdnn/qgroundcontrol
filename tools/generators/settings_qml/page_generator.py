@@ -16,6 +16,17 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from ..common.controls import (
+    EnableCheckboxDef,
+    ButtonDef,
+    parse_enable_checkbox,
+    parse_button,
+    render_slider,
+    render_checkbox,
+    render_combobox,
+    render_textfield,
+)
+
 # Matches C++ FactMetaData::splitTranslatedList() regex: [,，、]
 # Handles ASCII comma, fullwidth comma (U+FF0C), and enumeration comma (U+3001)
 # which translators sometimes substitute for standard commas.
@@ -35,8 +46,8 @@ class ControlDef:
     showWhen: str = ""  # extra visibility expression (ANDed with fact.userVisible)
     enableWhen: str = ""  # enabled expression
     placeholder: str = ""  # placeholder text for text fields
-    enableCheckbox: dict = field(default_factory=dict)  # slider: {"checked": expr, "onClicked": expr}
-    button: dict = field(default_factory=dict)           # adjacent button: {"text": str, "onClicked": expr, "enabled": expr}
+    enableCheckbox: EnableCheckboxDef | None = None  # slider: checked/onClicked
+    button: ButtonDef | None = None                    # adjacent button: text/onClicked/enabled
 
     @property
     def settings_group(self) -> str:
@@ -58,7 +69,7 @@ class GroupDef:
     headingDescription: str = ""   # optional dynamic heading description
     component: str = ""            # custom QML component (replaces generated controls)
     sectionName: str = ""          # display name for tree nav (falls back to heading)
-    keywords: str = ""                                    # curated search keywords (comma-separated)
+    keywords: list[str] = field(default_factory=list)  # curated search keywords
     controls: list[ControlDef] = field(default_factory=list)
     missing: list[str] = field(default_factory=list)  # descriptions of complex UI not yet generated
 
@@ -93,7 +104,7 @@ def load_page_def(json_path: Path) -> PageDef:
             headingDescription=grp_data.get("headingDescription", ""),
             component=grp_data.get("component", ""),
             sectionName=grp_data.get("sectionName", ""),
-            keywords=grp_data.get("keywords", ""),
+            keywords=_parse_keywords(grp_data.get("keywords", [])),
             missing=grp_data.get("missing", []),
         )
         for ctrl_data in grp_data.get("controls", []):
@@ -104,8 +115,8 @@ def load_page_def(json_path: Path) -> PageDef:
                 showWhen=ctrl_data.get("showWhen", ""),
                 enableWhen=ctrl_data.get("enableWhen", ""),
                 placeholder=ctrl_data.get("placeholder", ""),
-                enableCheckbox=ctrl_data.get("enableCheckbox", {}),
-                button=ctrl_data.get("button", {}),
+                enableCheckbox=parse_enable_checkbox(ctrl_data.get("enableCheckbox")),
+                button=parse_button(ctrl_data.get("button")),
             ))
         page.groups.append(grp)
     return page
@@ -189,29 +200,52 @@ def _split_translated_list(csv: str) -> list[str]:
     return [s.strip() for s in _TRANSLATED_LIST_RE.split(csv) if s.strip()]
 
 
-def _get_fact_search_terms(setting: str, settings_dir: Path) -> list[str]:
-    """Get search terms for a fact from its keywords."""
-    meta = _load_settings_metadata(settings_dir)
-    fact = meta.get(setting, {})
-    kw_str = fact.get("keywords", "")
-    if not kw_str:
-        return []
-    return [kw.lower() for kw in _split_translated_list(kw_str)]
+def _parse_keywords(raw: list[str] | str) -> list[str]:
+    """Accept keywords as a JSON array or comma-separated string."""
+    if isinstance(raw, list):
+        return raw
+    if isinstance(raw, str) and raw:
+        return [kw.strip() for kw in _split_translated_list(raw) if kw.strip()]
+    return []
 
 
 # --------------------------------------------------------------------------- #
 # QML generation
 # --------------------------------------------------------------------------- #
 
+def _wrap_with_description(control_qml: str, fact_ref: str, vis_expr: str, indent: str) -> str:
+    """Wrap a control's QML in a ColumnLayout that appends a shortDescription label."""
+    wrapper_lines = [
+        f"{indent}ColumnLayout {{",
+        f"{indent}    Layout.fillWidth: true",
+        f"{indent}    spacing: ScreenTools.defaultFontPixelHeight / 4",
+        f"{indent}    visible: {vis_expr}",
+        f"",
+    ]
+    # Indent the inner control QML by one extra level
+    for line in control_qml.splitlines():
+        wrapper_lines.append(f"    {line}" if line.strip() else line)
+    wrapper_lines.append(f"")
+    wrapper_lines.append(f"{indent}    QGCLabel {{")
+    wrapper_lines.append(f"{indent}        Layout.fillWidth: true")
+    wrapper_lines.append(f"{indent}        text: {fact_ref}.shortDescription")
+    wrapper_lines.append(f"{indent}        visible: text !== \"\"")
+    wrapper_lines.append(f"{indent}        font.pointSize: ScreenTools.smallFontPointSize")
+    wrapper_lines.append(f"{indent}        wrapMode: Text.WordWrap")
+    wrapper_lines.append(f"{indent}    }}")
+    wrapper_lines.append(f"{indent}}}")
+    return "\n".join(wrapper_lines)
+
+
 def _qml_control(ctrl: ControlDef, settings_dir: Path) -> str:
     """Generate QML for a single control."""
     indent = "        "
     fact_ref = f"QGroundControl.settingsManager.{ctrl.setting}"
 
-    def _vis_line() -> str:
+    def _vis_expr() -> str:
         if ctrl.showWhen:
-            return f"{indent}    visible: ({ctrl.showWhen}) && fact.userVisible"
-        return f"{indent}    visible: fact.userVisible"
+            return f"({ctrl.showWhen}) && {fact_ref}.userVisible"
+        return f"{fact_ref}.userVisible"
 
     def _enabled_line() -> str:
         if ctrl.enableWhen:
@@ -220,72 +254,38 @@ def _qml_control(ctrl: ControlDef, settings_dir: Path) -> str:
 
     # Determine control type: explicit override or auto-detect from metadata
     if ctrl.control == "slider":
-        label_line = f'    label: qsTr("{ctrl.label}")' if ctrl.label else "    label: fact.label"
-        inner_indent = indent
-        has_button = bool(ctrl.button)
-        if has_button:
-            inner_indent = indent + "    "
-        lines = []
-        if has_button:
-            lines.append(f"{indent}RowLayout {{")
-            lines.append(f"{indent}    Layout.fillWidth: true")
-            lines.append(f"{indent}    spacing: ScreenTools.defaultFontPixelWidth")
-            if ctrl.showWhen:
-                lines.append(f"{indent}    visible: ({ctrl.showWhen}) && {fact_ref}.userVisible")
-            else:
-                lines.append(f"{indent}    visible: {fact_ref}.userVisible")
-        lines.append(f"{inner_indent}FactTextFieldSlider {{")
-        lines.append(f"{inner_indent}    Layout.fillWidth: true")
-        lines.append(f"{inner_indent}{label_line}")
-        lines.append(f"{inner_indent}    fact: {fact_ref}")
-        if not has_button:
-            if ctrl.showWhen:
-                lines.append(f"{inner_indent}    visible: ({ctrl.showWhen}) && fact.userVisible")
-            else:
-                lines.append(f"{inner_indent}    visible: fact.userVisible")
-        if ctrl.enableCheckbox:
-            lines.append(f"{inner_indent}    showEnableCheckbox: true")
-            if ctrl.enableCheckbox.get("checked"):
-                lines.append(f"{inner_indent}    enableCheckBoxChecked: {ctrl.enableCheckbox['checked']}")
-            if ctrl.enableCheckbox.get("onClicked"):
-                lines.append(f"{inner_indent}    onEnableCheckboxClicked: {ctrl.enableCheckbox['onClicked']}")
-        if ctrl.enableWhen:
-            lines.append(f"{inner_indent}    enabled: {ctrl.enableWhen}")
-        lines.append(f"{inner_indent}}}")
-        if has_button:
-            btn = ctrl.button
-            lines.append(f'{inner_indent}QGCButton {{')
-            lines.append(f'{inner_indent}    text: qsTr("{btn["text"]}")')
-            lines.append(f'{inner_indent}    onClicked: {btn["onClicked"]}')
-            if btn.get("enabled"):
-                lines.append(f'{inner_indent}    enabled: {btn["enabled"]}')
-            lines.append(f'{inner_indent}}}')
-            lines.append(f"{indent}}}")
-        return "\n".join(lines)
+        control_qml = render_slider(
+            fact_ref, indent,
+            label=ctrl.label,
+            enable_checkbox=ctrl.enableCheckbox,
+            button=ctrl.button,
+            enable_when=ctrl.enableWhen,
+        )
+        return _wrap_with_description(control_qml, fact_ref, _vis_expr(), indent)
     elif ctrl.control == "browse":
         label_line = f'    label: qsTr("{ctrl.label}")' if ctrl.label else "    label: fact.label"
         enabled = _enabled_line()
-        return (
+        control_qml = (
             f"{indent}LabelledFactBrowse {{\n"
             f"{indent}    Layout.fillWidth: true\n"
             f"{indent}{label_line}\n"
             f"{indent}    fact: {fact_ref}\n"
-            f"{_vis_line()}\n"
             f"{enabled}"
             f"{indent}}}"
         )
+        return _wrap_with_description(control_qml, fact_ref, _vis_expr(), indent)
     elif ctrl.control == "scaler":
         label_line = f'    label: qsTr("{ctrl.label}")' if ctrl.label else "    label: fact.label"
         enabled = _enabled_line()
-        return (
+        control_qml = (
             f"{indent}LabelledFactIncrementer {{\n"
             f"{indent}    Layout.fillWidth: true\n"
             f"{indent}{label_line}\n"
             f"{indent}    fact: {fact_ref}\n"
-            f"{_vis_line()}\n"
             f"{enabled}"
             f"{indent}}}"
         )
+        return _wrap_with_description(control_qml, fact_ref, _vis_expr(), indent)
     elif ctrl.control == "checkbox":
         use_checkbox = True
         use_combobox = False
@@ -304,46 +304,39 @@ def _qml_control(ctrl: ControlDef, settings_dir: Path) -> str:
     enabled = _enabled_line()
 
     if use_checkbox:
-        label_line = f'    text: qsTr("{ctrl.label}")' if ctrl.label else "    text: fact.label"
-        return (
-            f"{indent}FactCheckBoxSlider {{\n"
-            f"{indent}    Layout.fillWidth: true\n"
-            f"{indent}{label_line}\n"
-            f"{indent}    fact: {fact_ref}\n"
-            f"{_vis_line()}\n"
-            f"{enabled}"
-            f"{indent}}}"
+        control_qml = render_checkbox(
+            fact_ref, indent,
+            label=ctrl.label,
+            enable_when=ctrl.enableWhen,
+            label_property="text",
+            label_source="fact.label",
+            qml_type="FactCheckBoxSlider",
         )
+        return _wrap_with_description(control_qml, fact_ref, _vis_expr(), indent)
     elif use_combobox:
-        label_line = f'    label: qsTr("{ctrl.label}")' if ctrl.label else "    label: fact.label"
-        return (
-            f"{indent}LabelledFactComboBox {{\n"
-            f"{indent}    Layout.fillWidth: true\n"
-            f"{indent}{label_line}\n"
-            f"{indent}    fact: {fact_ref}\n"
-            f"{indent}    indexModel: false\n"
-            f"{_vis_line()}\n"
-            f"{enabled}"
-            f"{indent}}}"
+        control_qml = render_combobox(
+            fact_ref, indent,
+            label=ctrl.label,
+            enable_when=ctrl.enableWhen,
+            label_source="fact.label",
+            qml_type="LabelledFactComboBox",
         )
+        return _wrap_with_description(control_qml, fact_ref, _vis_expr(), indent)
     else:
-        label_line = f'    label: qsTr("{ctrl.label}")' if ctrl.label else "    label: fact.label"
         fact_type = _get_fact_type(ctrl.setting, settings_dir)
-        lines = [
-            f"{indent}LabelledFactTextField {{",
-            f"{indent}    Layout.fillWidth: true",
-            f"{indent}{label_line}",
-            f"{indent}    fact: {fact_ref}",
-            _vis_line(),
-        ]
-        if ctrl.enableWhen:
-            lines.append(f"{indent}    enabled: {ctrl.enableWhen}")
+        extra: list[str] = []
         if fact_type == "string":
-            lines.append(f"{indent}    textFieldPreferredWidth: _stringFieldWidth")
-        if ctrl.placeholder:
-            lines.append(f'{indent}    textField.placeholderText: qsTr("{ctrl.placeholder}")')
-        lines.append(f"{indent}}}")
-        return "\n".join(lines)
+            extra.append("textFieldPreferredWidth: _stringFieldWidth")
+        control_qml = render_textfield(
+            fact_ref, indent,
+            label=ctrl.label,
+            enable_when=ctrl.enableWhen,
+            placeholder=ctrl.placeholder,
+            label_source="fact.label",
+            qml_type="LabelledFactTextField",
+            extra_lines=extra if extra else None,
+        )
+        return _wrap_with_description(control_qml, fact_ref, _vis_expr(), indent)
 
 
 def _qml_missing_placeholder(description: str) -> str:
@@ -406,18 +399,49 @@ def generate_page_qml(page: PageDef, settings_dir: Path) -> str:
 
     lines.append("")
 
+    # Generate sectionVisible(index) function for dynamic sidebar filtering.
+    # Each case returns the visibility expression for that group index,
+    # excluding sectionFilter (which only controls the content area).
+    section_cases: list[str] = []
+    for grp_idx, grp in enumerate(page.groups):
+        vis_parts: list[str] = []
+        if grp.showWhen:
+            vis_parts.append(f"({grp.showWhen})")
+        if grp.controls:
+            fact_refs = [f"QGroundControl.settingsManager.{c.setting}" for c in grp.controls]
+            auto_vis = " || ".join(f"{ref}.userVisible" for ref in fact_refs)
+            vis_parts.append(f"({auto_vis})")
+        if vis_parts:
+            section_cases.append(f"        case {grp_idx}: return {' && '.join(vis_parts)}")
+    if section_cases:
+        lines.append("    function sectionVisible(index) {")
+        lines.append("        switch (index) {")
+        for case_line in section_cases:
+            lines.append(case_line)
+        lines.append("        default: return true")
+        lines.append("        }")
+        lines.append("    }")
+        lines.append("")
+
     # Groups
     for grp_idx, grp in enumerate(page.groups):
         section_vis = f"(sectionFilter === -1 || sectionFilter === {grp_idx})"
 
-        # Custom component: emit it directly instead of generating controls
+        # Custom component: wrap in a ColumnLayout so that sectionFilter
+        # controls the wrapper's visibility without overriding the
+        # component's own visible: binding.
         if grp.component:
-            lines.append(f"    {grp.component} {{")
-            lines.append("        Layout.fillWidth: true")
+            vis_parts = [section_vis]
             if grp.showWhen:
-                lines.append(f"        visible: {section_vis} && ({grp.showWhen})")
-            else:
-                lines.append(f"        visible: {section_vis}")
+                vis_parts.append(f"({grp.showWhen})")
+            lines.append("    ColumnLayout {")
+            lines.append("        Layout.fillWidth: true")
+            lines.append("        spacing: 0")
+            lines.append(f"        visible: {' && '.join(vis_parts)}")
+            lines.append("")
+            lines.append(f"        {grp.component} {{")
+            lines.append("            Layout.fillWidth: true")
+            lines.append("        }")
             lines.append("    }")
             lines.append("")
             continue
@@ -507,31 +531,26 @@ def generate_pages_model_qml(pages_json_path: Path) -> str:
 
         # Extract section names and search terms from the page definition
         sections: list[str] = []
-        # searchTerms: list of {section: index, terms: "section heading keywords..."}
+        # searchTerms: list of {section: index, terms: "lowercased terms..."}
         search_terms: list[dict] = []
+        # translatableTerms: list of {section: index, context: "file.json", terms: ["Original Case", ...]}
+        translatable_terms: list[dict] = []
         page_def_name = entry.get("pageDefinition")
         if page_def_name:
             page_def_path = pages_dir / page_def_name
             if page_def_path.exists():
-                settings_dir = pages_dir.parent.parent.parent / "Settings"
                 page_def = load_page_def(page_def_path)
                 for grp_idx, grp in enumerate(page_def.groups):
                     section_name = grp.display_name
                     sections.append(section_name)
-                    # Build search terms from page name + section heading
+
+                    # English search terms (lowercased): heading + keywords + control labels
                     terms_parts = [name.lower(), section_name.lower()]
-                    if grp.controls:
-                        # Collect keywords from individual fact metadata
-                        for ctrl in grp.controls:
-                            terms_parts.extend(
-                                _get_fact_search_terms(ctrl.setting, settings_dir)
-                            )
-                    else:
-                        # Component-only group: use group-level keywords
-                        if grp.keywords:
-                            terms_parts.extend(
-                                kw.lower() for kw in _split_translated_list(grp.keywords)
-                            )
+                    for kw in grp.keywords:
+                        terms_parts.append(kw.lower())
+                    for ctrl in grp.controls:
+                        if ctrl.label:
+                            terms_parts.append(ctrl.label.lower())
                     # Deduplicate while preserving order
                     seen: set[str] = set()
                     unique_terms: list[str] = []
@@ -544,9 +563,29 @@ def generate_pages_model_qml(pages_json_path: Path) -> str:
                         "terms": " ".join(unique_terms),
                     })
 
+                    # Translatable terms (original case): heading + keywords + control labels
+                    tr_parts: list[str] = [section_name]
+                    for kw in grp.keywords:
+                        tr_parts.append(kw)
+                    for ctrl in grp.controls:
+                        if ctrl.label:
+                            tr_parts.append(ctrl.label)
+                    seen_tr: set[str] = set()
+                    unique_tr: list[str] = []
+                    for t in tr_parts:
+                        if t not in seen_tr:
+                            seen_tr.add(t)
+                            unique_tr.append(t)
+                    translatable_terms.append({
+                        "section": grp_idx,
+                        "context": page_def_name,
+                        "terms": unique_tr,
+                    })
+
         # Encode as JSON strings for the ListElement
         sections_json = json.dumps(sections)
         search_json = json.dumps(search_terms).replace("'", "\\'")
+        translatable_json = json.dumps(translatable_terms).replace("'", "\\'")
 
         lines.append("")
         lines.append("    ListElement {")
@@ -555,6 +594,7 @@ def generate_pages_model_qml(pages_json_path: Path) -> str:
         lines.append(f'        iconUrl: "{icon}"')
         lines.append(f"        sections: '{sections_json}'")
         lines.append(f"        searchTerms: '{search_json}'")
+        lines.append(f"        translatableTerms: '{translatable_json}'")
         if visible:
             lines.append(f"        pageVisible: function() {{ return {visible} }}")
         else:
